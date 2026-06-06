@@ -243,7 +243,7 @@ TEST(watcher_detects_git_commit) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -296,7 +296,7 @@ TEST(watcher_detects_dirty_worktree) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -342,7 +342,7 @@ TEST(watcher_detects_new_file) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -389,7 +389,7 @@ TEST(watcher_no_change_no_reindex) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -432,7 +432,7 @@ TEST(watcher_multiple_projects) {
              "git add a.txt && git commit -q -m 'init'",
              tmpdirA);
     if (system(cmd) != 0) {
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     snprintf(cmd, sizeof(cmd),
@@ -441,7 +441,7 @@ TEST(watcher_multiple_projects) {
              "git add b.txt && git commit -q -m 'init'",
              tmpdirB);
     if (system(cmd) != 0) {
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -554,7 +554,7 @@ TEST(watcher_interval_blocks_repoll) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -630,7 +630,7 @@ TEST(watcher_git_removed_no_crash) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -677,7 +677,7 @@ TEST(watcher_continued_dirty) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -748,7 +748,7 @@ TEST(watcher_baseline_dirty_repo) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     /* Make dirty BEFORE baseline */
@@ -794,7 +794,7 @@ TEST(watcher_unwatch_prunes_state) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -842,7 +842,7 @@ TEST(watcher_watch_after_unwatch) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -906,7 +906,7 @@ TEST(watcher_detects_file_delete) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -952,7 +952,7 @@ TEST(watcher_detects_subdir_file) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -1024,7 +1024,7 @@ TEST(watcher_full_flow_new_file) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -1076,7 +1076,7 @@ TEST(watcher_fallback_still_detects) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -1138,7 +1138,7 @@ TEST(watcher_poll_only_watched_projects) {
              "git add a.txt && git commit -q -m 'init'",
              tmpdirA);
     if (system(cmd) != 0) {
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     snprintf(cmd, sizeof(cmd),
@@ -1147,7 +1147,7 @@ TEST(watcher_poll_only_watched_projects) {
              "git add b.txt && git commit -q -m 'init'",
              tmpdirB);
     if (system(cmd) != 0) {
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -1203,7 +1203,7 @@ TEST(watcher_touch_resets_immediate) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -1255,7 +1255,7 @@ TEST(watcher_modify_tracked_file) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
@@ -1551,7 +1551,7 @@ TEST(watcher_callback_data_passed) {
              tmpdir);
     if (system(cmd) != 0) {
         th_rmtree(tmpdir);
-        FAIL("git not available");
+        SKIP_PLATFORM("git not available (POSIX-shell git-setup unavailable here)");
     }
 
     cbm_store_t *store = cbm_store_open_memory();
