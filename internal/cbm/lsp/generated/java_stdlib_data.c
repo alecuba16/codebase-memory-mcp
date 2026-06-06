@@ -141,6 +141,20 @@ void cbm_java_stdlib_register(CBMTypeRegistry *reg, CBMArena *arena) {
     static const char *parents_file_writer[] = {"java.io.Writer", NULL};
     static const char *parents_io_exception[] = {"java.lang.Exception", NULL};
     static const char *parents_runtime_exc_chain[] = {"java.lang.RuntimeException", NULL};
+    /* Parent lists for types previously registered with inline compound
+     * literals. A compound literal has automatic (block) storage duration,
+     * so storing its address into the registry left a dangling stack pointer
+     * once the REG_TYPE statement's block ended — an AddressSanitizer
+     * stack-use-after-scope when the inheritance walk later read
+     * rt->embedded_types[0]. These must be static so their addresses outlive
+     * the call, exactly like the parent lists above. */
+    static const char *parents_gregorian_calendar[] = {"java.util.Calendar", NULL};
+    static const char *parents_file_not_found_exc[] = {"java.io.IOException", NULL};
+    static const char *parents_closeable[] = {"java.lang.AutoCloseable", NULL};
+    static const char *parents_unary_operator[] = {"java.util.function.Function", NULL};
+    static const char *parents_binary_operator[] = {"java.util.function.BiFunction", NULL};
+    static const char *parents_completable_future[] = {"java.util.concurrent.Future", NULL};
+    static const char *parents_reentrant_lock[] = {"java.util.concurrent.locks.Lock", NULL};
 
     /* ── java.lang ─────────────────────────────────────────────── */
     REG_TYPE("java.lang.Object", "Object", false, no_parents);
@@ -498,7 +512,7 @@ void cbm_java_stdlib_register(CBMTypeRegistry *reg, CBMArena *arena) {
     REG_TYPE("java.util.Date", "Date", false, parents_object);
     REG_TYPE("java.util.Calendar", "Calendar", false, parents_object);
     REG_TYPE("java.util.GregorianCalendar", "GregorianCalendar", false,
-             ((const char *[]){"java.util.Calendar", NULL}));
+             parents_gregorian_calendar);
     REG_TYPE("java.util.TimeZone", "TimeZone", false, parents_object);
     REG_TYPE("java.util.Locale", "Locale", false, parents_object);
     REG_TYPE("java.util.UUID", "UUID", false, parents_object);
@@ -831,12 +845,12 @@ void cbm_java_stdlib_register(CBMTypeRegistry *reg, CBMArena *arena) {
     REG_TYPE("java.io.File", "File", false, parents_object);
     REG_TYPE("java.io.IOException", "IOException", false, parents_io_exception);
     REG_TYPE("java.io.FileNotFoundException", "FileNotFoundException", false,
-             ((const char *[]){"java.io.IOException", NULL}));
+             parents_file_not_found_exc);
     REG_TYPE("java.io.UncheckedIOException", "UncheckedIOException", false,
              parents_runtime_exc_chain);
     REG_TYPE("java.io.Serializable", "Serializable", true, no_parents);
     REG_TYPE("java.io.Closeable", "Closeable", true,
-             ((const char *[]){"java.lang.AutoCloseable", NULL}));
+             parents_closeable);
     REG_TYPE("java.io.Flushable", "Flushable", true, no_parents);
 
     REG_METHOD("java.io.PrintStream", "println", cbm_type_builtin(arena, "void"));
@@ -966,9 +980,9 @@ void cbm_java_stdlib_register(CBMTypeRegistry *reg, CBMArena *arena) {
     REG_TYPE("java.util.function.BiConsumer", "BiConsumer", true, no_parents);
     REG_TYPE("java.util.function.Supplier", "Supplier", true, no_parents);
     REG_TYPE("java.util.function.UnaryOperator", "UnaryOperator", true,
-             ((const char *[]){"java.util.function.Function", NULL}));
+             parents_unary_operator);
     REG_TYPE("java.util.function.BinaryOperator", "BinaryOperator", true,
-             ((const char *[]){"java.util.function.BiFunction", NULL}));
+             parents_binary_operator);
     REG_TYPE("java.util.function.IntFunction", "IntFunction", true, no_parents);
     REG_TYPE("java.util.function.LongFunction", "LongFunction", true, no_parents);
     REG_TYPE("java.util.function.DoubleFunction", "DoubleFunction", true, no_parents);
@@ -1127,7 +1141,7 @@ void cbm_java_stdlib_register(CBMTypeRegistry *reg, CBMArena *arena) {
     REG_TYPE("java.util.concurrent.Executors", "Executors", false, parents_object);
     REG_TYPE("java.util.concurrent.Future", "Future", true, no_parents);
     REG_TYPE("java.util.concurrent.CompletableFuture", "CompletableFuture", false,
-             ((const char *[]){"java.util.concurrent.Future", NULL}));
+             parents_completable_future);
     REG_TYPE("java.util.concurrent.ConcurrentHashMap", "ConcurrentHashMap", false,
              parents_concurrent_hashmap);
     REG_TYPE("java.util.concurrent.ConcurrentMap", "ConcurrentMap", true, parents_map);
@@ -1139,7 +1153,7 @@ void cbm_java_stdlib_register(CBMTypeRegistry *reg, CBMArena *arena) {
              parents_object);
     REG_TYPE("java.util.concurrent.locks.Lock", "Lock", true, no_parents);
     REG_TYPE("java.util.concurrent.locks.ReentrantLock", "ReentrantLock", false,
-             ((const char *[]){"java.util.concurrent.locks.Lock", NULL}));
+             parents_reentrant_lock);
     REG_TYPE("java.util.concurrent.locks.ReadWriteLock", "ReadWriteLock", true, no_parents);
 
     REG_METHOD("java.util.concurrent.ExecutorService", "submit",
