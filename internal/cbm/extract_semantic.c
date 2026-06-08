@@ -139,6 +139,58 @@ static void walk_throws(CBMExtractCtx *ctx, TSNode root, const CBMLangSpec *spec
 
 // --- Read/Write detection (iterative) ---
 
+// Resolve an assignment LHS node to the bare name being written.  Handles
+// common wrappers so WRITES resolve for more languages than a raw identifier:
+//   - expression_list (Go `x = ...` desugars left to expression_list[x])
+//   - index/subscript (`cache[k] = v` → write the base var `cache`)
+//   - field/member/selector access (`self.total = ...`, `obj.Field = ...` →
+//     write the trailing field name `total`/`Field`)
+// Returns NULL if no simple write target can be determined.
+static char *resolve_lhs_write_name(CBMExtractCtx *ctx, TSNode left) {
+    // Unwrap a single-element expression_list (Go).
+    if (strcmp(ts_node_type(left), "expression_list") == 0) {
+        if (ts_node_named_child_count(left) != 1) {
+            return NULL; // multi-assign: ambiguous, skip
+        }
+        left = ts_node_named_child(left, 0);
+    }
+    const char *lk = ts_node_type(left);
+    if (strcmp(lk, "identifier") == 0 || strcmp(lk, "simple_identifier") == 0) {
+        return cbm_node_text(ctx->arena, left, ctx->source);
+    }
+    // Indexed write: write the base operand's identifier (`cache[k]` → cache).
+    if (strcmp(lk, "index_expression") == 0 || strcmp(lk, "subscript_expression") == 0) {
+        TSNode base = ts_node_child_by_field_name(left, TS_FIELD("operand"));
+        if (ts_node_is_null(base)) {
+            base = ts_node_child_by_field_name(left, TS_FIELD("object"));
+        }
+        if (ts_node_is_null(base) && ts_node_named_child_count(left) > 0) {
+            base = ts_node_named_child(left, 0);
+        }
+        if (!ts_node_is_null(base)) {
+            const char *bk = ts_node_type(base);
+            if (strcmp(bk, "identifier") == 0 || strcmp(bk, "simple_identifier") == 0) {
+                return cbm_node_text(ctx->arena, base, ctx->source);
+            }
+        }
+        return NULL;
+    }
+    // Field/member write: write the trailing field name (`self.total` → total,
+    // `obj.Field` → Field).  Covers Rust field_expression, C#/Java member access.
+    if (strcmp(lk, "field_expression") == 0 || strcmp(lk, "member_access_expression") == 0 ||
+        strcmp(lk, "field_access") == 0 || strcmp(lk, "selector_expression") == 0) {
+        TSNode fld = ts_node_child_by_field_name(left, TS_FIELD("field"));
+        if (ts_node_is_null(fld)) {
+            fld = ts_node_child_by_field_name(left, TS_FIELD("name"));
+        }
+        if (!ts_node_is_null(fld)) {
+            return cbm_node_text(ctx->arena, fld, ctx->source);
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
 // Try to emit a write for an assignment node.
 static void try_emit_assignment_write(CBMExtractCtx *ctx, TSNode node, const char *func_qn) {
     TSNode left = ts_node_child_by_field_name(node, TS_FIELD("left"));
@@ -150,11 +202,7 @@ static void try_emit_assignment_write(CBMExtractCtx *ctx, TSNode node, const cha
     if (ts_node_is_null(left)) {
         return;
     }
-    const char *lk = ts_node_type(left);
-    if (strcmp(lk, "identifier") != 0 && strcmp(lk, "simple_identifier") != 0) {
-        return;
-    }
-    char *name = cbm_node_text(ctx->arena, left, ctx->source);
+    char *name = resolve_lhs_write_name(ctx, left);
     if (name && name[0] && !cbm_is_keyword(name, ctx->language)) {
         CBMReadWrite rw;
         rw.var_name = name;
@@ -237,16 +285,13 @@ void handle_readwrites(CBMExtractCtx *ctx, TSNode node, const CBMLangSpec *spec,
         }
 
         if (!ts_node_is_null(left)) {
-            const char *lk = ts_node_type(left);
-            if (strcmp(lk, "identifier") == 0 || strcmp(lk, "simple_identifier") == 0) {
-                char *name = cbm_node_text(ctx->arena, left, ctx->source);
-                if (name && name[0] && !cbm_is_keyword(name, ctx->language)) {
-                    CBMReadWrite rw;
-                    rw.var_name = name;
-                    rw.is_write = true;
-                    rw.enclosing_func_qn = state->enclosing_func_qn;
-                    cbm_rw_push(&ctx->result->rw, ctx->arena, rw);
-                }
+            char *name = resolve_lhs_write_name(ctx, left);
+            if (name && name[0] && !cbm_is_keyword(name, ctx->language)) {
+                CBMReadWrite rw;
+                rw.var_name = name;
+                rw.is_write = true;
+                rw.enclosing_func_qn = state->enclosing_func_qn;
+                cbm_rw_push(&ctx->result->rw, ctx->arena, rw);
             }
         }
     }

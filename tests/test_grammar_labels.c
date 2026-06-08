@@ -196,7 +196,7 @@ static const LabelGolden LABEL_GOLDENS[] = {
     {"cmake", "Function:1,Module:1"},
     {"meson", "Module:1"},
     {"gn", "Module:1"},
-    {"just", "Module:1"},
+    {"just", "Function:1,Module:1"},
     {"hcl", "Class:1,Module:1"},
     {"nix", "Module:1"},
     {"gomod", "Module:1"},

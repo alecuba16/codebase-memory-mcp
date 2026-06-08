@@ -258,10 +258,13 @@ static void process_def(cbm_pipeline_ctx_t *ctx, const CBMDefinition *def, const
         def->file_path ? def->file_path : rel, (int)def->start_line, (int)def->end_line, props);
     /* Register callable symbols + Interface.  Interface must be in the registry
      * so C#/Java `class Foo : IBar` / `class Foo implements IBar` can resolve
-     * `IBar` to an INHERITS edge target during the enrichment phase. */
+     * `IBar` to an INHERITS edge target during the enrichment phase.
+     * Variable/Field defs are also registered so pass_usages.c can resolve
+     * READS/WRITES accesses (rw->var_name) to a Variable/Field node QN. */
     if (node_id > 0 && def->label &&
         (strcmp(def->label, "Function") == 0 || strcmp(def->label, "Method") == 0 ||
-         strcmp(def->label, "Class") == 0 || strcmp(def->label, "Interface") == 0)) {
+         strcmp(def->label, "Class") == 0 || strcmp(def->label, "Interface") == 0 ||
+         strcmp(def->label, "Variable") == 0 || strcmp(def->label, "Field") == 0)) {
         cbm_registry_add(ctx->registry, def->name, def->qualified_name, def->label);
     }
     char *file_qn = cbm_pipeline_fqn_compute(ctx->project_name, rel, "__file__");
@@ -320,6 +323,52 @@ static void create_channel_edges_for_file(cbm_pipeline_ctx_t *ctx, const CBMFile
             cbm_gbuf_insert_edge(ctx->gbuf, src_node->id, channel_id, edge_type, edge_props);
         }
     }
+}
+
+/* Create CONFIGURES edges for one file's env accesses.  extract_env_accesses.c
+ * records every os.Getenv / process.env / Environment.GetEnvironmentVariable
+ * style access into result->env_accesses.  We materialize one EnvVar node per
+ * env key and link the enclosing function (or the file node) CONFIGURES-> it,
+ * so environment-driven configuration is visible even when the accessor is a
+ * stdlib symbol that never resolves to an in-graph callee. */
+static int create_env_configures_for_file(cbm_pipeline_ctx_t *ctx, const CBMFileResult *result,
+                                          const char *rel) {
+    int count = 0;
+    char *file_qn = NULL;
+    const cbm_gbuf_node_t *file_node = NULL;
+    for (int j = 0; j < result->env_accesses.count; j++) {
+        const CBMEnvAccess *ea = &result->env_accesses.items[j];
+        if (!ea->env_key || !ea->env_key[0]) {
+            continue;
+        }
+        char env_qn[CBM_SZ_512];
+        snprintf(env_qn, sizeof(env_qn), "__env__%s", ea->env_key);
+        char env_props[CBM_SZ_512];
+        snprintf(env_props, sizeof(env_props), "{\"env_key\":\"%s\"}", ea->env_key);
+        int64_t env_id =
+            cbm_gbuf_upsert_node(ctx->gbuf, "EnvVar", ea->env_key, env_qn, "", 0, 0, env_props);
+        if (env_id <= 0) {
+            continue;
+        }
+        const cbm_gbuf_node_t *src = NULL;
+        if (ea->enclosing_func_qn && ea->enclosing_func_qn[0]) {
+            src = cbm_gbuf_find_by_qn(ctx->gbuf, ea->enclosing_func_qn);
+        }
+        if (!src) {
+            if (!file_qn) {
+                file_qn = cbm_pipeline_fqn_compute(ctx->project_name, rel, "__file__");
+                file_node = cbm_gbuf_find_by_qn(ctx->gbuf, file_qn);
+            }
+            src = file_node;
+        }
+        if (src && src->id != env_id) {
+            cbm_gbuf_insert_edge(ctx->gbuf, src->id, env_id, "CONFIGURES",
+                                 "{\"strategy\":\"env_access\"}");
+            count++;
+        }
+    }
+    free(file_qn);
+    return count;
 }
 
 /* Create IMPORTS edges for one file's imports.  Mirrors the resolution
@@ -432,6 +481,7 @@ int cbm_pipeline_pass_definitions(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t
              * map is available without the cache (single-file scope). */
             total_imports += create_import_edges_for_file(ctx, result, rel, NULL);
             create_channel_edges_for_file(ctx, result, rel);
+            create_env_configures_for_file(ctx, result, rel);
             cbm_free_result(result);
         }
     }
@@ -464,6 +514,7 @@ int cbm_pipeline_pass_definitions(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t
             total_imports +=
                 create_import_edges_for_file(ctx, result, files[i].rel_path, namespace_map);
             create_channel_edges_for_file(ctx, result, files[i].rel_path);
+            create_env_configures_for_file(ctx, result, files[i].rel_path);
         }
         cbm_pipeline_namespace_map_free(namespace_map);
         if (owns_local_cache) {

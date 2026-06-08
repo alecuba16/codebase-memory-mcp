@@ -240,6 +240,155 @@ static void handle_helm_chart(cbm_pipeline_ctx_t *ctx, const char *rel_path, con
     cbm_log_info("pass.k8s.helm", "file", rel_path, "deps", itoa_k8s(dep_edges));
 }
 
+/* ── Dependency-manifest handler (go.mod / requirements.txt) ──────── */
+
+static bool is_gomod_file(const char *base) {
+    return strcmp(base, "go.mod") == 0;
+}
+
+static bool is_requirements_file(const char *base) {
+    return strcmp(base, "requirements.txt") == 0;
+}
+
+/* Emit a DEPENDS_ON edge from the manifest file node to a (shared, per-project)
+ * external Package node.  Mirrors the Helm Chart.yaml DEPENDS_ON shape. */
+static int emit_dep_edge(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src, const char *rel_path,
+                         const char *ecosystem, const char *name) {
+    if (!name || !name[0]) {
+        return 0;
+    }
+    char dep_qn[CBM_SZ_512];
+    snprintf(dep_qn, sizeof(dep_qn), "%s.__%s_dep__.%s", ctx->project_name, ecosystem, name);
+    char dep_props[CBM_SZ_256];
+    snprintf(dep_props, sizeof(dep_props), "{\"source\":\"%s\",\"external\":true}", ecosystem);
+    int64_t dep_id =
+        cbm_gbuf_upsert_node(ctx->gbuf, "Package", name, dep_qn, rel_path, SKIP_ONE, 0, dep_props);
+    if (dep_id > 0 && dep_id != src->id) {
+        cbm_gbuf_insert_edge(ctx->gbuf, src->id, dep_id, "DEPENDS_ON", "{}");
+        return 1;
+    }
+    return 0;
+}
+
+/* Copy the first whitespace-delimited token of `line` into `out`. */
+static void first_token(const char *line, char *out, size_t out_sz) {
+    out[0] = '\0';
+    while (*line == ' ' || *line == '\t') {
+        line++;
+    }
+    size_t n = 0;
+    while (line[n] && line[n] != ' ' && line[n] != '\t' && line[n] != '\r' && line[n] != '\n' &&
+           n + 1 < out_sz) {
+        out[n] = line[n];
+        n++;
+    }
+    out[n] = '\0';
+}
+
+/* Parse go.mod `require` directives (single-line and block forms) and emit a
+ * DEPENDS_ON edge per dependency.  go.mod requires are not surfaced as imports
+ * by the extraction layer, so we parse the manifest text directly here. */
+static int parse_gomod_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
+                            const char *rel_path, const char *source) {
+    int edges = 0;
+    bool in_block = false;
+    const char *p = source;
+    while (p && *p) {
+        const char *eol = strchr(p, '\n');
+        size_t len = eol ? (size_t)(eol - p) : strlen(p);
+        char line[CBM_SZ_512];
+        size_t cp = len < sizeof(line) - 1 ? len : sizeof(line) - 1;
+        memcpy(line, p, cp);
+        line[cp] = '\0';
+        const char *t = line;
+        while (*t == ' ' || *t == '\t') {
+            t++;
+        }
+        if (in_block) {
+            if (t[0] == ')') {
+                in_block = false;
+            } else if (t[0] && t[0] != '/') {
+                char name[CBM_SZ_256];
+                first_token(t, name, sizeof(name));
+                edges += emit_dep_edge(ctx, src, rel_path, "gomod", name);
+            }
+        } else if (strncmp(t, "require", 7) == 0 && (t[7] == ' ' || t[7] == '\t' || t[7] == '(')) {
+            const char *rest = t + 7;
+            while (*rest == ' ' || *rest == '\t') {
+                rest++;
+            }
+            if (*rest == '(') {
+                in_block = true;
+            } else if (*rest) {
+                char name[CBM_SZ_256];
+                first_token(rest, name, sizeof(name));
+                edges += emit_dep_edge(ctx, src, rel_path, "gomod", name);
+            }
+        }
+        if (!eol) {
+            break;
+        }
+        p = eol + 1;
+    }
+    return edges;
+}
+
+/* Parse requirements.txt entries (one package spec per line) and emit a
+ * DEPENDS_ON edge per dependency.  The package name is the leading token up to
+ * the first version/extras/comment delimiter. */
+static int parse_requirements_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
+                                   const char *rel_path, const char *source) {
+    int edges = 0;
+    const char *p = source;
+    while (p && *p) {
+        const char *eol = strchr(p, '\n');
+        size_t len = eol ? (size_t)(eol - p) : strlen(p);
+        char line[CBM_SZ_512];
+        size_t cp = len < sizeof(line) - 1 ? len : sizeof(line) - 1;
+        memcpy(line, p, cp);
+        line[cp] = '\0';
+        const char *t = line;
+        while (*t == ' ' || *t == '\t') {
+            t++;
+        }
+        /* Skip blanks, comments, options (-r, --hash), and URLs. */
+        if (t[0] && t[0] != '#' && t[0] != '-' && strstr(t, "://") == NULL) {
+            char name[CBM_SZ_256];
+            size_t n = 0;
+            while (t[n] && t[n] != '=' && t[n] != '<' && t[n] != '>' && t[n] != '!' && t[n] != '~' &&
+                   t[n] != '[' && t[n] != ';' && t[n] != ' ' && t[n] != '\t' && t[n] != '\r' &&
+                   n + 1 < sizeof(name)) {
+                name[n] = t[n];
+                n++;
+            }
+            name[n] = '\0';
+            edges += emit_dep_edge(ctx, src, rel_path, "pypi", name);
+        }
+        if (!eol) {
+            break;
+        }
+        p = eol + 1;
+    }
+    return edges;
+}
+
+static void handle_dep_manifest(cbm_pipeline_ctx_t *ctx, const char *rel_path, const char *source,
+                                const char *ecosystem) {
+    if (!source) {
+        return;
+    }
+    char *file_qn = cbm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
+    const cbm_gbuf_node_t *src = file_qn ? cbm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
+    free(file_qn);
+    if (!src) {
+        return;
+    }
+    int dep_edges = strcmp(ecosystem, "gomod") == 0
+                        ? parse_gomod_deps(ctx, src, rel_path, source)
+                        : parse_requirements_deps(ctx, src, rel_path, source);
+    cbm_log_info("pass.k8s.depmanifest", "file", rel_path, "deps", itoa_k8s(dep_edges));
+}
+
 /* ── Pass entry point ────────────────────────────────────────────── */
 
 int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files, int file_count) {
@@ -264,7 +413,15 @@ int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files,
         CBMFileResult *cached =
             (ctx->result_cache && ctx->result_cache[i]) ? ctx->result_cache[i] : NULL;
 
-        if (cbm_is_kustomize_file(base)) {
+        if (is_gomod_file(base) || lang == CBM_LANG_GOMOD || is_requirements_file(base)) {
+            int dep_len = 0;
+            char *dep_src = k8s_read_file(path, &dep_len);
+            if (dep_src) {
+                handle_dep_manifest(ctx, rel, dep_src,
+                                    is_requirements_file(base) ? "pypi" : "gomod");
+                free(dep_src);
+            }
+        } else if (cbm_is_kustomize_file(base)) {
             handle_kustomize(ctx, path, rel, cached);
             kustomize_count++;
         } else if (lang == CBM_LANG_YAML || lang == CBM_LANG_K8S) {

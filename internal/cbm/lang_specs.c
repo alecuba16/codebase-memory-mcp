@@ -1519,7 +1519,8 @@ static const char *smithy_class_types[] = {"structure_statement", "union_stateme
 static const char *smithy_field_types[] = {"shape_member", NULL};
 static const char *smithy_import_types[] = {"use_statement", NULL};
 static const char *smithy_module_types[] = {"source_file", NULL};
-static const char *wit_func_types[] = {"func_item", "resource_method", NULL};
+static const char *wit_func_types[] = {"func_item", "resource_method", "export_item",
+                                       "import_item", NULL};
 static const char *wit_class_types[] = {"record_item",   "resource_item", "enum_items",
                                         "variant_items", "flags_items",   NULL};
 static const char *wit_field_types[] = {"record_field", NULL};
