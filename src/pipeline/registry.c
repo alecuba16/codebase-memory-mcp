@@ -465,28 +465,6 @@ int cbm_registry_size(const cbm_registry_t *r) {
 /* ── Resolution ──────────────────────────────────────────────────── */
 
 /* Callback context for import_map_suffix scan */
-struct ims_ctx {
-    const char *resolved_dot; /* "proj.other." */
-    size_t resolved_dot_len;
-    const char *dot_suffix; /* ".Foo" */
-    size_t dot_suffix_len;
-    const char *found_key;
-};
-
-static void ims_scan(const char *key, void *value, void *ud) {
-    (void)value;
-    struct ims_ctx *ctx = ud;
-    if (ctx->found_key) {
-        return; /* already found */
-    }
-    size_t klen = strlen(key);
-    if (klen >= ctx->resolved_dot_len + ctx->dot_suffix_len &&
-        strncmp(key, ctx->resolved_dot, ctx->resolved_dot_len) == 0 &&
-        strcmp(key + klen - ctx->dot_suffix_len, ctx->dot_suffix) == 0) {
-        ctx->found_key = key;
-    }
-}
-
 /* Strategy 1: Import map lookup (exact → suffix fallback) */
 static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *prefix,
                                            const char *suffix, const char **keys, const char **vals,
@@ -531,24 +509,30 @@ static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *
         return (cbm_resolution_t){stored_key, "import_map", CONF_IMPORT_MAP, REG_RESOLVED};
     }
 
-    /* import_map_suffix fallback: scan for QNs starting with resolved+"."
-     * and ending with "."+suffix */
+    /* import_map_suffix fallback: find a QN starting with resolved+"." and
+     * ending with "."+suffix. Any such QN's last segment equals the last
+     * segment of suffix, so probe the by_name index and tail-check the (few)
+     * candidates instead of cbm_ht_foreach over the WHOLE exact table — that
+     * scan ran per unresolved call and dominated elasticsearch's resolve
+     * phase (94% of samples: 700k-entry foreach + strlen per entry). */
     if (suffix && suffix[0]) {
         char resolved_dot[CBM_SZ_512];
         char dot_suffix[CBM_SZ_256];
         snprintf(resolved_dot, sizeof(resolved_dot), "%s.", resolved);
         snprintf(dot_suffix, sizeof(dot_suffix), ".%s", suffix);
-        struct ims_ctx ctx = {
-            .resolved_dot = resolved_dot,
-            .resolved_dot_len = strlen(resolved_dot),
-            .dot_suffix = dot_suffix,
-            .dot_suffix_len = strlen(dot_suffix),
-            .found_key = NULL,
-        };
-        cbm_ht_foreach(r->exact, ims_scan, &ctx);
-        if (ctx.found_key) {
-            return (cbm_resolution_t){ctx.found_key, "import_map_suffix", CONF_IMPORT_MAP_SUFFIX,
-                                      REG_RESOLVED};
+        qn_array_t *arr = cbm_ht_get(r->by_name, simple_name(suffix));
+        if (arr) {
+            size_t rd_len = strlen(resolved_dot);
+            size_t ds_len = strlen(dot_suffix);
+            for (int i = 0; i < arr->count; i++) {
+                const char *qn = arr->items[i];
+                size_t klen = strlen(qn);
+                if (klen >= rd_len + ds_len && strncmp(qn, resolved_dot, rd_len) == 0 &&
+                    strcmp(qn + klen - ds_len, dot_suffix) == 0) {
+                    return (cbm_resolution_t){qn, "import_map_suffix", CONF_IMPORT_MAP_SUFFIX,
+                                              REG_RESOLVED};
+                }
+            }
         }
     }
     return empty_result();
