@@ -12,6 +12,7 @@
  */
 #include "../src/foundation/compat.h"
 #include "../src/foundation/compat_thread.h"
+#include "../src/foundation/log.h"
 #include "test_framework.h"
 #include "test_helpers.h"
 #include "ui/httpd.h"
@@ -36,6 +37,18 @@ typedef int th_sock_t;
 #define th_sock_close close
 #define TH_SOCK_BAD (-1)
 #endif
+
+static char httpd_log_buf[8192];
+
+static void httpd_capture_log(const char *line) {
+    size_t used = strlen(httpd_log_buf);
+    size_t avail = sizeof(httpd_log_buf) - used;
+    if (avail <= 1)
+        return;
+    int n = snprintf(httpd_log_buf + used, avail, "%s\n", line ? line : "");
+    if (n < 0 || (size_t)n >= avail)
+        httpd_log_buf[sizeof(httpd_log_buf) - 1] = '\0';
+}
 
 /* ── Raw-socket test client ───────────────────────────────────── */
 
@@ -535,6 +548,35 @@ TEST(ui_server_slow_request_hits_deadline) {
     PASS();
 }
 
+TEST(ui_server_access_log_redacts_query) {
+    httpd_log_buf[0] = '\0';
+    CBMLogLevel prev_level = cbm_log_get_level();
+    cbm_log_set_level(CBM_LOG_DEBUG);
+    cbm_log_set_format(CBM_LOG_FORMAT_TEXT);
+    cbm_log_set_sink_ex(httpd_capture_log, CBM_LOG_SINK_REPLACE);
+
+    th_server_t ts;
+    ASSERT_EQ(th_server_start(&ts), 0);
+    char resp[4096];
+    int n = th_http(cbm_http_server_port(ts.srv),
+                    "GET /definitely/not/here?token=secret HTTP/1.1\r\n\r\n", resp, sizeof(resp));
+    ASSERT_GT(n, 0);
+    ASSERT_EQ(th_status(resp), 404);
+    th_server_stop(&ts);
+
+    cbm_log_set_sink(NULL);
+    cbm_log_set_level(prev_level);
+
+    ASSERT_NOT_NULL(strstr(httpd_log_buf, "msg=http.request"));
+    ASSERT_NOT_NULL(strstr(httpd_log_buf, "component=graph_ui"));
+    ASSERT_NOT_NULL(strstr(httpd_log_buf, "http.request.method=GET"));
+    ASSERT_NOT_NULL(strstr(httpd_log_buf, "url.path=/definitely/not/here"));
+    ASSERT_NOT_NULL(strstr(httpd_log_buf, "http.response.status_code=404"));
+    ASSERT_NULL(strstr(httpd_log_buf, "token"));
+    ASSERT_NULL(strstr(httpd_log_buf, "secret"));
+    PASS();
+}
+
 TEST(ui_server_stop_joins_cleanly) {
     th_server_t ts;
     ASSERT_EQ(th_server_start(&ts), 0);
@@ -578,5 +620,6 @@ SUITE(httpd) {
     RUN_TEST(ui_server_nul_in_target_rejected);
     RUN_TEST(ui_server_browse_traversal_probe);
     RUN_TEST(ui_server_slow_request_hits_deadline);
+    RUN_TEST(ui_server_access_log_redacts_query);
     RUN_TEST(ui_server_stop_joins_cleanly);
 }

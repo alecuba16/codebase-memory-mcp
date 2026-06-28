@@ -52,6 +52,8 @@ struct cbm_httpd {
 struct cbm_http_conn {
     cbm_sock_t fd;
     int recv_deadline_ms;
+    int response_status;
+    size_t response_bytes;
 };
 
 /* ── Small platform helpers ───────────────────────────────────── */
@@ -213,6 +215,14 @@ void cbm_httpd_conn_close(cbm_http_conn_t *c) {
         return;
     cbm_sock_close(c->fd);
     free(c);
+}
+
+int cbm_http_conn_status(const cbm_http_conn_t *c) {
+    return c ? c->response_status : 0;
+}
+
+size_t cbm_http_conn_response_bytes(const cbm_http_conn_t *c) {
+    return c ? c->response_bytes : 0;
 }
 
 /* ── Head parsing ─────────────────────────────────────────────── */
@@ -506,6 +516,8 @@ void cbm_http_reply_buf(cbm_http_conn_t *c, int status, const char *extra_header
                         size_t len) {
     if (!c)
         return;
+    c->response_status = status;
+    c->response_bytes = len;
     char head[1024];
     int hn = snprintf(head, sizeof(head),
                       "HTTP/1.1 %d %s\r\n"

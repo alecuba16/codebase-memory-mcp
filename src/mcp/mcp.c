@@ -4943,7 +4943,10 @@ char *cbm_mcp_server_handle(cbm_mcp_server_t *srv, const char *line) {
         return NULL;
     }
 
+    struct timespec req_t0;
+    cbm_clock_gettime(CLOCK_MONOTONIC, &req_t0);
     char *result_json = NULL;
+    bool request_logged = false;
 
     if (strcmp(req.method, "initialize") == 0) {
         result_json = cbm_mcp_initialize_response(req.params_raw);
@@ -4974,6 +4977,10 @@ char *cbm_mcp_server_handle(cbm_mcp_server_t *srv, const char *line) {
                            ((long long)(t1.tv_nsec - t0.tv_nsec) / MCP_MS_TO_US);
         bool is_err = (result_json != NULL) && (strstr(result_json, "\"isError\":true") != NULL);
         cbm_diag_record_query(dur_us, is_err);
+        long long request_dur_us = ((long long)(t1.tv_sec - req_t0.tv_sec) * MCP_S_TO_US) +
+                                   ((long long)(t1.tv_nsec - req_t0.tv_nsec) / MCP_MS_TO_US);
+        cbm_log_mcp_request(req.method, tool_name, is_err, request_dur_us);
+        request_logged = true;
 
         result_json = inject_update_notice(srv, result_json);
         free(tool_name);
@@ -4989,8 +4996,21 @@ char *cbm_mcp_server_handle(cbm_mcp_server_t *srv, const char *line) {
             .error_json = err_obj,
         };
         char *err = cbm_jsonrpc_format_response(&err_resp);
+        struct timespec t1;
+        cbm_clock_gettime(CLOCK_MONOTONIC, &t1);
+        long long dur_us = ((long long)(t1.tv_sec - req_t0.tv_sec) * MCP_S_TO_US) +
+                           ((long long)(t1.tv_nsec - req_t0.tv_nsec) / MCP_MS_TO_US);
+        cbm_log_mcp_request(req.method, NULL, true, dur_us);
         cbm_jsonrpc_request_free(&req);
         return err;
+    }
+
+    if (!request_logged) {
+        struct timespec t1;
+        cbm_clock_gettime(CLOCK_MONOTONIC, &t1);
+        long long dur_us = ((long long)(t1.tv_sec - req_t0.tv_sec) * MCP_S_TO_US) +
+                           ((long long)(t1.tv_nsec - req_t0.tv_nsec) / MCP_MS_TO_US);
+        cbm_log_mcp_request(req.method, NULL, false, dur_us);
     }
 
     cbm_jsonrpc_response_t resp = {

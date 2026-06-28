@@ -5,6 +5,7 @@
  */
 #include "../src/foundation/compat.h"
 #include "../src/foundation/compat_fs.h" /* cbm_unlink / cbm_rmdir */
+#include "../src/foundation/log.h"
 #include "test_framework.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
@@ -13,6 +14,12 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+
+static char mcp_log_buf[4096];
+
+static void mcp_capture_log(const char *line) {
+    snprintf(mcp_log_buf, sizeof(mcp_log_buf), "%s", line ? line : "");
+}
 
 /* ══════════════════════════════════════════════════════════════════
  *  JSON-RPC PARSING
@@ -403,6 +410,34 @@ TEST(server_handle_tools_list_paginates) {
     free(resp);
 
     cbm_mcp_server_free(srv);
+    PASS();
+}
+
+TEST(server_handle_logs_request_without_params) {
+    mcp_log_buf[0] = '\0';
+    CBMLogLevel prev_level = cbm_log_get_level();
+    cbm_log_set_level(CBM_LOG_DEBUG);
+    cbm_log_set_format(CBM_LOG_FORMAT_TEXT);
+    cbm_log_set_sink_ex(mcp_capture_log, CBM_LOG_SINK_REPLACE);
+
+    cbm_mcp_server_t *srv = cbm_mcp_server_new(NULL);
+    char *resp =
+        cbm_mcp_server_handle(srv,
+                              "{\"jsonrpc\":\"2.0\",\"id\":210,\"method\":\"tools/list\","
+                              "\"params\":{\"token\":\"secret\"}}");
+    ASSERT_NOT_NULL(resp);
+    free(resp);
+    cbm_mcp_server_free(srv);
+
+    cbm_log_set_sink(NULL);
+    cbm_log_set_level(prev_level);
+
+    ASSERT_NOT_NULL(strstr(mcp_log_buf, "msg=mcp.request"));
+    ASSERT_NOT_NULL(strstr(mcp_log_buf, "rpc.system=jsonrpc"));
+    ASSERT_NOT_NULL(strstr(mcp_log_buf, "rpc.method=tools/list"));
+    ASSERT_NOT_NULL(strstr(mcp_log_buf, "status=ok"));
+    ASSERT_NULL(strstr(mcp_log_buf, "token"));
+    ASSERT_NULL(strstr(mcp_log_buf, "secret"));
     PASS();
 }
 
@@ -2416,6 +2451,7 @@ SUITE(mcp) {
     RUN_TEST(server_handle_initialized_notification);
     RUN_TEST(server_handle_tools_list);
     RUN_TEST(server_handle_tools_list_paginates);
+    RUN_TEST(server_handle_logs_request_without_params);
     RUN_TEST(server_handle_unknown_method);
 
     /* Server handle — edge cases */

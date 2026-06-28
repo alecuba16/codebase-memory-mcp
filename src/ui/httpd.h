@@ -95,6 +95,8 @@ void cbm_http_replyf(cbm_http_conn_t *c, int status, const char *extra_headers, 
 void cbm_http_reply_buf(cbm_http_conn_t *c, int status, const char *extra_headers, const void *data,
                         size_t len);
 
+int cbm_http_conn_status(const cbm_http_conn_t *c);
+size_t cbm_http_conn_response_bytes(const cbm_http_conn_t *c);
 void cbm_httpd_conn_close(cbm_http_conn_t *c);
 
 /* ── Pure helpers (unit-tested without sockets) ───────────────── */

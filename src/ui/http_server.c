@@ -1386,15 +1386,22 @@ void cbm_http_server_run(cbm_http_server_t *srv) {
         if (!conn)
             continue; /* timeout — re-check stop flag */
 
+        uint64_t request_start_ms = cbm_now_ms();
         cbm_http_req_t req;
         int rc = cbm_httpd_read_request(conn, &req);
         if (rc == 0) {
             dispatch_request(srv, conn, &req);
+            cbm_log_http_request("graph_ui", req.method, req.path, cbm_http_conn_status(conn),
+                                 (int64_t)(cbm_now_ms() - request_start_ms), req.body_len,
+                                 cbm_http_conn_response_bytes(conn));
             cbm_http_req_free(&req);
         } else if (rc > 0) {
             /* Parse/transport error with a known HTTP status (400/408/411/413/431).
              * No CORS reflection here — the request was never parsed. */
             cbm_http_replyf(conn, rc, "", "bad request");
+            cbm_log_http_request("graph_ui", "", "", cbm_http_conn_status(conn),
+                                 (int64_t)(cbm_now_ms() - request_start_ms), 0,
+                                 cbm_http_conn_response_bytes(conn));
         }
         cbm_httpd_conn_close(conn);
     }
