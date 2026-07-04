@@ -597,14 +597,6 @@ You: "Install this MCP server: https://github.com/DeusData/codebase-memory-mcp"
 
 ### Install via Claude Code plugin
 
-This repository is also a Claude Code plugin marketplace, so you can find and
-add the server from inside Claude Code:
-
-```bash
-claude plugin marketplace add DeusData/codebase-memory-mcp
-claude plugin install codebase-memory@codebase-memory
-```
-
 The plugin registers the MCP server only. It starts the server with
 `npx -y codebase-memory-mcp@<version>`, pinned to the current release; the first
 start downloads that release's binary through the npm package, which verifies
@@ -618,6 +610,44 @@ with both you run it twice, under two tool namespaces
 `mcp__plugin_codebase-memory_codebase-memory-mcp__*`). Choose `install` for the
 full Claude Code setup; choose the plugin to add just the server without
 running an installer.
+
+### Install modes: MCP or Skill CLI
+
+`install` can configure agents in two modes:
+
+| Mode | Command | How it works | Use when |
+|------|---------|--------------|----------|
+| MCP mode | `codebase-memory-mcp install --skill-mode=mcp` | Installs MCP server config, Claude Code skill, and supported hooks. The agent starts `codebase-memory-mcp` as a stdio MCP server and calls tools over the MCP connection. This is the default. | Your agent supports MCP and you want direct tool calls. |
+| Skill CLI mode | `codebase-memory-mcp install --skill-mode=cli` | Installs a Claude Code skill that instructs the agent to run `codebase-memory-mcp cli <tool> '<json>'` through shell commands. It skips MCP config and hooks. | You want skill-only usage without maintaining an MCP connection or installing MCP config. |
+
+Default install is MCP mode:
+
+```bash
+codebase-memory-mcp install
+# same as:
+codebase-memory-mcp install --skill-mode=mcp
+```
+
+Skill-only install:
+
+```bash
+codebase-memory-mcp install --skill-mode=cli
+```
+
+Preview planned writes without changing files:
+
+```bash
+codebase-memory-mcp install --plan --skill-mode=mcp
+codebase-memory-mcp install --plan --skill-mode=cli
+```
+
+In MCP mode the process exits when stdin closes, on SIGTERM/SIGINT, or when its parent process exits. For wrappers that launch a stdio server intermittently, set an idle timeout so it self-exits after no requests:
+
+```bash
+CBM_IDLE_TIMEOUT_S=60 codebase-memory-mcp
+# or
+codebase-memory-mcp --idle-timeout=60
+```
 
 ### Build from Source
 
@@ -914,6 +944,8 @@ codebase-memory-mcp cli list_projects --format json --detail stats | jq '.projec
 ```
 
 Tools requiring arguments accept JSON piped on stdin. Tools with only optional arguments, such as `list_projects`, accept flags, `--args-file`, or redirected JSON files without waiting on an inherited pipe. Inline JSON remains accepted for backward compatibility but is deprecated in favor of flags, `--args-file`, or stdin.
+
+This is also how Skill CLI mode works. The installed skill tells the LLM to create JSON arguments, run the `cli` subcommand through bash, and summarize the result. No MCP client connection is required for those requests.
 
 ## MCP Tools
 
