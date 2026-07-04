@@ -9,6 +9,7 @@
  *   --ui=true/false Enable/disable HTTP UI server (persisted)
  *   --port=N        Set HTTP UI port (persisted, default 9749)
  *   --tool-profile=analysis|scout  Expose a restricted agent tool surface
+ *   --idle-timeout=N Exit after N seconds without MCP requests (default: disabled)
  *
  * Long-lived MCP and hook frontends are thin clients of one mandatory
  * per-account daemon. One-shot CLI tool calls run in an isolated local server
@@ -40,6 +41,7 @@ enum {
     MAIN_CLI_ARGC = 2,
     MAIN_FLAG_OFF = 5, /* strlen("--ui=") */
     MAIN_PORT_OFF = 7, /* strlen("--port=") */
+    MAIN_IDLE_TIMEOUT_OFF = 15, /* strlen("--idle-timeout=") */
     MAIN_MAX_PORT = 65536,
     MAIN_PATH_CAP = 4096,
     MAIN_CONNECT_TIMEOUT_MS = 1000,
@@ -901,7 +903,7 @@ static void print_help(void) {
     printf("  codebase-memory-mcp cli [--progress] [--json] <tool> [args]\n");
     printf("                                      Run one tool locally, then exit\n");
     printf("  codebase-memory-mcp install [-y|-n] [--force] [--dry-run] "
-           "[--dir=<path>] [--skip-config]\n");
+           "[--dir=<path>] [--skip-config] [--skill-mode=cli|mcp]\n");
     printf("  codebase-memory-mcp uninstall [-y|-n] [--dry-run]\n");
     printf("  codebase-memory-mcp update [-y|-n]\n");
     printf("  codebase-memory-mcp config <list|get|set|reset>\n");
@@ -912,6 +914,7 @@ static void print_help(void) {
     printf("  --ui=false   Disable HTTP graph visualization (persisted)\n");
     printf("  --port=N     Set UI port (default 9749, persisted)\n");
     printf("  --tool-profile=analysis|scout  Expose a restricted inspection surface\n");
+    printf("  --idle-timeout=N  Exit after N seconds without MCP requests\n");
     printf("\nSupported automatic/conditional client surfaces (45):\n");
     printf("  Claude Code, Codex CLI, Gemini CLI, Zed, OpenCode,\n");
     printf("  Antigravity, Aider, KiloCode, VS Code, Cursor, Windsurf,\n");
@@ -1110,6 +1113,30 @@ static uint8_t parse_ui_flags(int argc, char **argv, bool *ui_enabled, int *ui_p
         }
     }
     return update_mask;
+}
+
+/* Optional whole-server idle timeout. Default 0 keeps permanent MCP sessions.
+ * CBM_IDLE_TIMEOUT_S supports wrappers that launch a stdio server from skills
+ * and want it to self-exit after intermittent requests stop. */
+static int parse_idle_timeout(int argc, char **argv) {
+    int timeout_s = 0;
+    char env_buf[128];
+    const char *env = cbm_safe_getenv("CBM_IDLE_TIMEOUT_S", env_buf, sizeof(env_buf), NULL);
+    if (env && env[0]) {
+        long v = strtol(env, NULL, CBM_DECIMAL_BASE);
+        if (v > 0 && v < MAIN_MAX_PORT) {
+            timeout_s = (int)v;
+        }
+    }
+    for (int i = SKIP_ONE; i < argc; i++) {
+        if (strncmp(argv[i], "--idle-timeout=", SLEN("--idle-timeout=")) == 0) {
+            long v = strtol(argv[i] + MAIN_IDLE_TIMEOUT_OFF, NULL, CBM_DECIMAL_BASE);
+            if (v > 0 && v < MAIN_MAX_PORT) {
+                timeout_s = (int)v;
+            }
+        }
+    }
+    return timeout_s;
 }
 
 /* Install platform-specific signal handlers. */
