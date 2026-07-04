@@ -619,7 +619,7 @@ static const char cli_skill_content[] =
     "```bash\n"
     "command -v codebase-memory-mcp\n"
     "codebase-memory-mcp --version\n"
-    "codebase-memory-mcp cli list_projects '{}'\n"
+    "printf '{}' | codebase-memory-mcp cli list_projects\n"
     "```\n"
     "\n"
     "If binary is missing, install binary-only, not MCP config:\n"
