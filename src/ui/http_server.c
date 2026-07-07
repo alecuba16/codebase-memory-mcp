@@ -148,16 +148,29 @@ static index_job_t g_index_jobs[MAX_INDEX_JOBS];
 
 /* ── Serve embedded asset ─────────────────────────────────────── */
 
+/* Content-Security-Policy for the served UI. No external host appears in any
+ * directive, so the browser cannot load or connect to anything off-origin —
+ * this ENFORCES the airgap (the code makes no external calls; this stops a
+ * future dependency or injected content from doing so). connect-src 'self'
+ * confines fetch/XHR/WebSocket to the local server. The 'self'/data:/blob:/
+ * 'unsafe-inline'-style/'wasm-unsafe-eval' allowances cover the bundled app's
+ * own needs (React inline styles, three.js textures/workers/WASM). */
+#define CBM_UI_CSP                                                       \
+    "Content-Security-Policy: default-src 'self'; connect-src 'self'; "  \
+    "img-src 'self' data: blob:; script-src 'self' 'wasm-unsafe-eval'; " \
+    "style-src 'self' 'unsafe-inline'; font-src 'self' data:; "          \
+    "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'\r\n"
+
 static bool serve_embedded(cbm_http_conn_t *c, const char *path) {
     const cbm_embedded_file_t *f = cbm_embedded_lookup(path);
     if (!f)
         return false;
 
     /* Build headers with correct Content-Type for this asset */
-    char hdrs[512];
+    char hdrs[1024];
     snprintf(hdrs, sizeof(hdrs),
              "%sContent-Type: %s\r\n"
-             "Cache-Control: public, max-age=31536000, immutable\r\n",
+             "Cache-Control: public, max-age=31536000, immutable\r\n" CBM_UI_CSP,
              g_cors, f->content_type);
 
     cbm_http_reply_buf(c, 200, hdrs, f->data, (size_t)f->size);
