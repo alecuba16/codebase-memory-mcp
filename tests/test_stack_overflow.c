@@ -441,6 +441,15 @@ static bool so_extract_crashes(const char *content, CBMLanguage lang, const char
 #endif
 }
 
+#if !defined(_WIN32)
+/* Child-side alarm handler: a clean exit on the deadline — never reached on
+ * a crash (SIGSEGV/SIGBUS terminate the child first and stay visible). */
+static void so_parse_alarm_exit(int sig) {
+    (void)sig;
+    _exit(0);
+}
+#endif
+
 /* Parse `content` with tree-sitter DIRECTLY in a forked child — bypassing
  * cbm_extract_file's Perl pre-parse nesting guard — returning true if the child
  * died by signal. This is the crash-isolating regression for the vendored GLR
@@ -471,6 +480,15 @@ static bool so_parse_crashes(const char *content, CBMLanguage lang) {
         return false;
     }
     if (pid == 0) {
+        /* Deterministic ceiling: past the merge cap the ambiguity-exploded
+         * GLR parse GRINDS (minutes, environment-dependent — measured 2s to
+         * 218s for the identical input). The guard's signal is the CRASH,
+         * which fires within the first seconds when the recursion cap
+         * regresses — so a clean exit after 10s proves the cap held without
+         * paying for the rest of the grind. SIGSEGV/SIGBUS still report as
+         * WIFSIGNALED; the alarm handler exits cleanly, never masking them. */
+        signal(SIGALRM, so_parse_alarm_exit);
+        alarm(10);
         TSParser *parser = ts_parser_new();
         if (parser) {
             ts_parser_set_language(parser, ts_lang);
