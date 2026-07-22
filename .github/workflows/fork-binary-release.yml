@@ -1,0 +1,72 @@
+# Manual fork binary build for any selected branch.
+# Simple path: build one Linux x64 binary and upload it as a workflow artifact.
+# It does not publish GitHub Releases and does not use the release workflow.
+name: Fork Binary Release
+
+run-name: fork binary release @ ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version string embedded in the binary, e.g. fork-preview"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux-amd64:
+    name: Build Linux amd64 artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Annotate selected branch
+        shell: bash
+        run: |
+          echo "::notice title=Selected ref::Building fork binary artifact from ${GITHUB_REF_NAME}."
+
+      - name: Checkout selected ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev
+
+      - name: Build binary
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$VERSION" ]; then
+            scripts/build.sh --version "$VERSION" CC=gcc CXX=g++
+          else
+            scripts/build.sh CC=gcc CXX=g++
+          fi
+          build/c/codebase-memory-mcp --version
+
+      - name: Package artifact
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAFE_REF=$(printf '%s' "${GITHUB_REF_NAME}" | tr '/:@ ' '----' | tr -cd 'A-Za-z0-9._-')
+          [ -n "$SAFE_REF" ] || SAFE_REF=branch
+          ARTIFACT_BASE="codebase-memory-mcp-${SAFE_REF}-linux-amd64"
+          mkdir -p "dist/${ARTIFACT_BASE}"
+          cp build/c/codebase-memory-mcp LICENSE install.sh "dist/${ARTIFACT_BASE}/"
+          scripts/gen-third-party-notices.sh "dist/${ARTIFACT_BASE}/THIRD_PARTY_NOTICES.md"
+          tar -czf "dist/${ARTIFACT_BASE}.tar.gz" -C dist "${ARTIFACT_BASE}"
+          sha256sum "dist/${ARTIFACT_BASE}.tar.gz" > "dist/${ARTIFACT_BASE}.tar.gz.sha256"
+          echo "artifact_base=${ARTIFACT_BASE}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.package.outputs.artifact_base }}
+          path: |
+            dist/${{ steps.package.outputs.artifact_base }}.tar.gz
+            dist/${{ steps.package.outputs.artifact_base }}.tar.gz.sha256
+          if-no-files-found: error
