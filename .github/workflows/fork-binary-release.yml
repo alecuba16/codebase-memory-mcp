@@ -1,0 +1,119 @@
+# Manual fork binary build for any selected branch.
+# Simple path: build release-style Linux/macOS archives and upload them as
+# workflow artifacts. It does not publish GitHub Releases and does not use the
+# release workflow.
+name: Fork Binary Release
+
+run-name: fork binary release @ ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional version string embedded in the binary, e.g. fork-preview"
+        required: false
+        type: string
+        default: ""
+      build_ref:
+        description: "Branch or tag to build from this fork, e.g. personal-memory or skill-cli-mode. Empty = selected workflow ref."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }} artifact
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cc: gcc
+            cxx: g++
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            cc: gcc
+            cxx: g++
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            cc: cc
+            cxx: c++
+          - runner: macos-14
+            goos: darwin
+            goarch: arm64
+            cc: cc
+            cxx: c++
+    steps:
+      - name: Resolve target ref
+        id: target
+        shell: bash
+        env:
+          BUILD_REF: ${{ inputs.build_ref }}
+        run: |
+          set -euo pipefail
+          TARGET_REF="${BUILD_REF:-$GITHUB_REF_NAME}"
+          echo "target_ref=${TARGET_REF}" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Target ref::Building fork binary artifact from ${TARGET_REF} for ${{ matrix.goos }}-${{ matrix.goarch }}."
+
+      - name: Checkout target ref
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ steps.target.outputs.target_ref }}
+
+      - name: Install build dependencies (Ubuntu)
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev
+
+      - name: Build binary
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          set -euo pipefail
+          if [ -n "$VERSION" ]; then
+            scripts/build.sh --version "$VERSION" "CC=$CC" "CXX=$CXX"
+          else
+            scripts/build.sh "CC=$CC" "CXX=$CXX"
+          fi
+          build/c/codebase-memory-mcp --version
+
+      - name: Ad-hoc sign macOS binary
+        if: startsWith(matrix.goos, 'darwin')
+        run: codesign --sign - --force build/c/codebase-memory-mcp
+
+      - name: Package release-style archive
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          ARCHIVE="codebase-memory-mcp-${GOOS}-${GOARCH}.tar.gz"
+          cp LICENSE install.sh build/c/
+          scripts/gen-third-party-notices.sh build/c/THIRD_PARTY_NOTICES.md
+          tar -czf "$ARCHIVE" -C build/c codebase-memory-mcp LICENSE install.sh THIRD_PARTY_NOTICES.md
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256"
+          fi
+
+      - name: Upload release-style artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            codebase-memory-mcp-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            codebase-memory-mcp-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+          if-no-files-found: error
