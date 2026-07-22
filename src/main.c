@@ -915,6 +915,11 @@ static void print_help(void) {
     printf("  --port=N     Set UI port (default 9749, persisted)\n");
     printf("  --tool-profile=analysis|scout  Expose a restricted inspection surface\n");
     printf("  --idle-timeout=N  Exit after N seconds without MCP requests\n");
+    printf("\nInstall modes:\n");
+    printf("  --skill-mode=mcp  Install MCP config, Claude Code skill, and supported hooks (default)\n");
+    printf("  --skill-mode=cli  Install only the Claude Code CLI skill and skip MCP configs/hooks\n");
+    printf("  Claude skill path: ~/.claude/skills/codebase-memory/SKILL.md\n");
+    printf("  Shared skill path for supported clients: ~/.agents/skills/codebase-memory/SKILL.md\n");
     printf("\nSupported automatic/conditional client surfaces (45):\n");
     printf("  Claude Code, Codex CLI, Gemini CLI, Zed, OpenCode,\n");
     printf("  Antigravity, Aider, KiloCode, VS Code, Cursor, Windsurf,\n");
