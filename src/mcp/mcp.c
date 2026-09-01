@@ -13611,6 +13611,11 @@ static int poll_for_input_unix(cbm_mcp_server_t *srv, int fd, FILE *in, int time
 /* ── Event loop ───────────────────────────────────────────────── */
 
 int cbm_mcp_server_run(cbm_mcp_server_t *srv, FILE *in, FILE *out) {
+    return cbm_mcp_server_run_with_idle_timeout(srv, in, out, 0);
+}
+
+int cbm_mcp_server_run_with_idle_timeout(cbm_mcp_server_t *srv, FILE *in, FILE *out,
+                                          int idle_timeout_s) {
     int fd = cbm_fileno(in);
     int poll_timeout_s = idle_timeout_s > 0 ? idle_timeout_s : STORE_IDLE_TIMEOUT_S;
 

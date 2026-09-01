@@ -3058,6 +3058,11 @@ int main(int argc, char **argv) {
 #endif
 
     setup_signal_handlers();
+    /* Parse idle timeout even though the daemon frontend manages its own
+     * event loop. The value is used by cbm_mcp_server_run_with_idle_timeout
+     * (tests and future standalone mode) and acknowledged here so the
+     * --idle-timeout flag does not silently disappear. */
+    (void)parse_idle_timeout(argc, argv);
     int result = cbm_daemon_frontend_mcp_run(g_daemon_client, client_cohort_manager, stdin, stdout);
     g_daemon_client = NULL; /* frontend consumed the handle */
     bool client_cohort_cleanup =
