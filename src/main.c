@@ -39,8 +39,8 @@
 enum {
     MAIN_MIN_ARGC = 1,
     MAIN_CLI_ARGC = 2,
-    MAIN_FLAG_OFF = 5, /* strlen("--ui=") */
-    MAIN_PORT_OFF = 7, /* strlen("--port=") */
+    MAIN_FLAG_OFF = 5,          /* strlen("--ui=") */
+    MAIN_PORT_OFF = 7,          /* strlen("--port=") */
     MAIN_IDLE_TIMEOUT_OFF = 15, /* strlen("--idle-timeout=") */
     MAIN_MAX_PORT = 65536,
     MAIN_PATH_CAP = 4096,
@@ -916,10 +916,13 @@ static void print_help(void) {
     printf("  --tool-profile=analysis|scout  Expose a restricted inspection surface\n");
     printf("  --idle-timeout=N  Exit after N seconds without MCP requests\n");
     printf("\nInstall modes:\n");
-    printf("  --skill-mode=mcp  Install MCP config, Claude Code skill, and supported hooks (default)\n");
-    printf("  --skill-mode=cli  Install only the Claude Code CLI skill and skip MCP configs/hooks\n");
+    printf("  --skill-mode=mcp  Install MCP config, Claude Code skill, and supported hooks "
+           "(default)\n");
+    printf(
+        "  --skill-mode=cli  Install only the Claude Code CLI skill and skip MCP configs/hooks\n");
     printf("  Claude skill path: ~/.claude/skills/codebase-memory/SKILL.md\n");
-    printf("  Shared skill path for supported clients: ~/.agents/skills/codebase-memory/SKILL.md\n");
+    printf(
+        "  Shared skill path for supported clients: ~/.agents/skills/codebase-memory/SKILL.md\n");
     printf("\nSupported automatic/conditional client surfaces (45):\n");
     printf("  Claude Code, Codex CLI, Gemini CLI, Zed, OpenCode,\n");
     printf("  Antigravity, Aider, KiloCode, VS Code, Cursor, Windsurf,\n");
