@@ -20955,7 +20955,6 @@ static char *handle_manage_memory(cbm_mcp_server_t *srv, const char *args) {
     char *result = cbm_mcp_text_result(json, is_error);
     free(json);
     return result;
-
 }
 
 static char *handle_manage_adr(cbm_mcp_server_t *srv, const char *args) {
@@ -21873,7 +21872,6 @@ static void maybe_auto_index(cbm_mcp_server_t *srv) {
     }
 }
 
-
 /* ── Server request handler ───────────────────────────────────── */
 
 bool cbm_mcp_jsonrpc_response_prepend_notice(char **response_io, const char *notice) {
@@ -22341,7 +22339,7 @@ int cbm_mcp_server_run(cbm_mcp_server_t *srv, FILE *in, FILE *out) {
 }
 
 int cbm_mcp_server_run_with_idle_timeout(cbm_mcp_server_t *srv, FILE *in, FILE *out,
-                                          int idle_timeout_s) {
+                                         int idle_timeout_s) {
     int fd = cbm_fileno(in);
     int poll_timeout_s = idle_timeout_s > 0 ? idle_timeout_s : STORE_IDLE_TIMEOUT_S;
 
