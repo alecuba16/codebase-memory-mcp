@@ -22074,7 +22074,7 @@ int cbm_mcp_server_run(cbm_mcp_server_t *srv, FILE *in, FILE *out) {
 }
 
 int cbm_mcp_server_run_with_idle_timeout(cbm_mcp_server_t *srv, FILE *in, FILE *out,
-                                          int idle_timeout_s) {
+                                         int idle_timeout_s) {
     int fd = cbm_fileno(in);
     int poll_timeout_s = idle_timeout_s > 0 ? idle_timeout_s : STORE_IDLE_TIMEOUT_S;
 
